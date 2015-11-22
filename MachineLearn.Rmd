@@ -1,0 +1,82 @@
+---
+title: "Machine Learning"
+author: "Veronika Rauch"
+date: "22 Nov 2015"
+output:
+  html_document:
+    keep_md: yes
+---
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+The aim of this exercise is the predict the "quality"of weight lifting, i.e. how well the wigh lifting is carried out. Given a training data set were participatns have executed weight lifitng exercise in 5 different ways, we are looking to build a model that predicts how good a weightlift is, i.e. in which of thesecategories it falls. There are several different variables measured that can be included in the prediction model, so lets start by having a closer look at the data:
+```{r, echo=TRUE,message=FALSE}
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile="train.csv", method = "curl")
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile="test.csv", method = "curl")
+train_data <- read.csv("train.csv",na.strings=c("NA","") )
+test_data <-  read.csv("test.csv",na.strings=c("NA",""))
+library(caret,quietly=TRUE)
+library(randomForest)
+dim(train_data)
+dim(test_data)
+str(train_data)
+hist(as.numeric(train_data$classe))
+```
+As we can see the data set has a 160 variables (including the outcome varibale) and from the outcome observations we have mostly class "A-1" qulity weight lifts and about a fairly equal amount of other quality weight lifts. There is a large number of possible predictors,however the first 7 columns are only dimensional and from exploring the data it looks like these can be ignored. Moreover some of the variables have very sparse values, i.e. many missing values. These variable are unlikely to add much value to the prediction,lets therefore remove them too.
+
+```{r, echo=TRUE}
+train_1<-train_data[colSums(is.na(train_data))==0]
+train_2<-train_1[,-c(1:7)]
+dim(train_2)
+```
+
+Lets now split the training set again into a training and a cross validation set
+```{r, echo=TRUE}
+set.seed(1239)
+Intrain <- createDataPartition(y=train_data$classe, p=0.80, list=FALSE)
+data_train <- train_2[Intrain,]
+data_cross <- train_2[-Intrain,]
+dim(data_train); dim(data_cross)
+```
+
+Lets now look at random forests as a potential model for predciting our quality of exercise factor variable. WE will use with 4-fold crossvalidation.
+
+```{r, echo=TRUE,cache=TRUE}
+forest_fit <- train(classe ~ .,
+                data = data_train, 
+                method = 'rf', 
+                trControl = trainControl(method = "cv", 
+                                         number = 4, 
+                                         allowParallel = TRUE, 
+                                         verboseIter = TRUE))
+
+```
+
+##In and out of Sample Error
+Lets now have a look at the in-sample and out of sample error by looking at the accuracy with our training and cross validation data set.
+```{r, echo=TRUE}
+prediction <- predict(forest_fit,data_train)
+CM <- confusionMatrix(prediction,data_train$classe)
+CM
+```
+So looking first at the in-sample error, we have a 100% accuracy, meaning the modelperfectly fits the data it is sampled on. Lets now have a look at the results with the cross validation data set.
+```{r, echo=TRUE}
+prediction <- predict(forest_fit,data_cross)
+CM_cross <- confusionMatrix(prediction,data_cross$classe)
+CM_cross
+```
+Here we have a near 100 percent accuracy with 0.9918 . So only very few of the predictions were incorrect.
+
+Lets now have a look how what predictions we get on our test data. Careful we need to adjust this in the same way as we did with the training data.
+
+##Prediction
+```{r, echo=TRUE}
+test_1<-test_data[colSums(is.na(train_data))==0]
+test_2<-test_1[,-c(1:7)]
+
+answers<- predict(forest_fit,test_2)
+answers
+```
+The Random forest model has given us very accurate results as we have seen from the cross validation. It is a good choice here as we ahve many variables which it can handle and it balances bias and variance trade-offs by settling for a balanced model
